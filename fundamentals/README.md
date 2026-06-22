@@ -30,7 +30,7 @@ No prior distributed-systems experience is assumed. Every concept comes with a *
 19. [Availability, Redundancy, Failover & SPOFs](#19-availability-redundancy-failover--spofs)
 20. [Observability](#20-observability)
 21. [Suggested Reading Order](#21-suggested-reading-order)
-22. [Sources](#22-sources)
+22. [References / Sources](#22-references--sources)
 
 ---
 
@@ -72,18 +72,18 @@ Separate **functional** from **non-functional**. Ask: How many users? Read-heavy
 ### Step 2 — Capacity (Back-of-the-Envelope) Estimation
 Turn requirements into **numbers** that drive architecture. The most important number is usually **QPS** (queries per second), because it dictates server count, DB load, and caching needs.
 
-A worked example — a URL shortener with 100M new URLs/day, read:write ratio of 100:1:
+A worked example — a URL shortener with 100M new URLs/day and a read:write ratio of 100:1:
 
 | Quantity | Calculation | Result |
 |---|---|---|
-| Write QPS | 100M / 86,400s | ~1,160 writes/s |
+| Write QPS | 100M ÷ 86,400s | ~1,160 writes/s |
 | Read QPS | 1,160 × 100 | ~116,000 reads/s |
 | Storage / yr | 100M/day × 365 × ~500 bytes | ~18 TB/yr |
 
 Memorize a few latency anchors: memory read ~100 ns, SSD read ~100 µs, cross-region round trip ~tens of ms. They tell you instantly whether a design can hit a latency target.
 
 ### Step 3 — API Design
-Define the **contract** between clients and your system before internals. List the endpoints/methods, their inputs, and outputs (e.g. `POST /urls {long_url} -> {short_url}`, `GET /{short_url} -> 302 redirect`). This forces clarity on what the system actually promises.
+Define the **contract** between clients and your system before internals. List the endpoints/methods, their inputs, and their outputs (e.g. `POST /urls {long_url} -> {short_url}`, `GET /{short_url} -> 302 redirect`). This forces clarity on what the system actually promises.
 
 ### Step 4 — Data Model
 Define entities, relationships, and access patterns. The **access patterns** (how you read/write) often matter more than the entities — they decide SQL vs NoSQL, what to index, and how to shard.
@@ -132,22 +132,24 @@ The internet's phone book: it translates a human name like `api.example.com` int
 **Trade-off:** DNS changes propagate slowly because of caching/TTLs, so it is a *coarse* tool — not for instant failover.
 
 ### IP Address
-The numeric address of a machine on a network (IPv4 like `93.184.216.34`, or IPv6). Packets are routed hop-by-hop using IP addresses.
+The numeric address of a machine on a network (IPv4 like `93.184.216.34`, or the much larger IPv6 space). Packets are routed hop-by-hop using IP addresses.
 
 ### HTTP / HTTPS
-**HTTP** is the request/response protocol of the web (methods `GET`, `POST`, `PUT`, `DELETE`, status codes `200`, `404`, `500`). **HTTPS** is HTTP wrapped in **TLS** encryption — it protects data in transit and authenticates the server. **Use HTTPS for everything**; the performance cost of TLS is negligible today and browsers/SEO require it.
+**HTTP** is the request/response protocol of the web (methods `GET`, `POST`, `PUT`, `DELETE`; status codes `200`, `404`, `500`). **HTTPS** is HTTP wrapped in **TLS** encryption — it protects data in transit and authenticates the server. **Use HTTPS for everything**; the performance cost of TLS is negligible today, and browsers and search engines effectively require it.
 
 ### TCP vs UDP
-These are the two main **transport** protocols beneath HTTP.
+These are the two main **transport** protocols beneath application protocols like HTTP.
 
 | | **TCP** | **UDP** |
 |---|---|---|
 | Connection | Connection-oriented (handshake) | Connectionless |
 | Reliability | Ordered, guaranteed delivery, retransmits | Best-effort, no guarantees |
 | Overhead | Higher (acks, ordering) | Very low |
-| Use when | Correctness matters: web, APIs, DBs, file transfer | Speed > completeness: live video/voice, gaming, DNS |
+| Use when | Correctness matters: web, APIs, DBs, file transfer | Speed > completeness: live video/voice, gaming, DNS lookups |
 
 > **Rule of thumb:** if a dropped packet must be re-sent, use **TCP**. If a dropped packet is better skipped than waited for (a stale video frame is useless), use **UDP**.
+>
+> **Nuance:** DNS uses UDP for normal queries but falls back to **TCP** for large responses (e.g. zone transfers, DNSSEC). And HTTP/3 runs over **QUIC**, which is built on UDP yet adds its own reliability — so "HTTP = TCP" is a useful simplification, not an absolute rule.
 
 ### Latency vs Throughput
 - **Latency** = *time for one operation* (how long a single request takes). Lower is better.
@@ -178,7 +180,7 @@ flowchart TB
 
 | | **Vertical** | **Horizontal** |
 |---|---|---|
-| Complexity | Low — no code changes | Higher — needs load balancing, statelessness |
+| Complexity | Low — often no code changes | Higher — needs load balancing, statelessness |
 | Ceiling | Hard hardware limit | Effectively unlimited |
 | Failure | One big SPOF | One node dies, others survive |
 | Cost curve | Gets expensive fast at the top end | More linear; commodity hardware |
@@ -209,16 +211,16 @@ flowchart TB
 ### Common Algorithms
 | Algorithm | How it works | Best for |
 |---|---|---|
-| **Round Robin** | Each server in turn, in order | Homogeneous servers, uniform requests; zero overhead |
+| **Round Robin** | Each server in turn, in order | Homogeneous servers, uniform requests; near-zero overhead |
 | **Weighted Round Robin** | Round robin biased by server capacity | Mixed-size servers |
 | **Least Connections** | Send to the server with fewest active connections | Long-lived / variable-duration requests |
-| **Least Response Time** | Fewest connections *and* fastest responses | Latency-sensitive heterogeneous fleets |
+| **Least Response Time** | Combines active connections *and* fastest responses | Latency-sensitive heterogeneous fleets |
 | **IP Hash** | Hash client IP → always same server | Sticky sessions when state lives on the server |
 
 ### L4 vs L7 Load Balancers
 | | **Layer 4 (Transport)** | **Layer 7 (Application)** |
 |---|---|---|
-| Sees | IP address + port only; never reads payload | Full HTTP — URLs, headers, cookies, gRPC methods |
+| Sees | IP address + port; does not read payload | Full HTTP — URLs, headers, cookies, gRPC methods |
 | Speed | Very fast, low CPU, predictable latency | Slower (parses requests) but smarter |
 | Capabilities | Raw forwarding | Content-based routing, TLS termination, path/header routing, WAF |
 | Use when | Max throughput, long-lived connections, video | Web apps, API gateways, microservice routing |
@@ -231,7 +233,7 @@ flowchart TB
 
 ## 7. Caching
 
-**Explanation.** A **cache** stores the result of expensive work (a DB query, a computed page, a remote call) in fast storage so future requests skip the work. It is the single highest-leverage tool for cutting latency and load. Caches show up at every layer:
+**Explanation.** A **cache** stores the result of expensive work (a DB query, a computed page, a remote call) in fast storage so future requests skip the work. It is one of the highest-leverage tools for cutting latency and load. Caches show up at every layer:
 
 - **Client cache** — browser memory/disk, app local cache. Closest to the user, zero network cost.
 - **CDN cache** — edge servers near users hold static assets (see §8).
@@ -251,10 +253,12 @@ flowchart LR
 ### Eviction Policies (what to drop when the cache is full)
 | Policy | Drops… | Best for |
 |---|---|---|
-| **LRU** (Least Recently Used) | Item not accessed for longest | General purpose; recency predicts future use (sessions, catalogs) |
+| **LRU** (Least Recently Used) | Item not accessed for the longest time | General purpose; recency predicts future use (sessions, catalogs) |
 | **LFU** (Least Frequently Used) | Item accessed least often | Stable hot keys (popular content, recommendations) |
-| **FIFO** | Oldest inserted item | Streaming/log-like data where age = irrelevance |
+| **FIFO** | Oldest inserted item | Streaming/log-like data where age ≈ irrelevance |
 | **TTL** | Anything past its expiry time | Data that goes stale on a known schedule |
+
+> Note: **TTL** is technically an *expiration* mechanism rather than a capacity-eviction policy, but it's listed here because in practice it's a core part of how caches decide what to keep.
 
 ### Write Policies (how writes interact with the cache)
 | Policy | Behaviour | Trade-off |
@@ -268,13 +272,13 @@ flowchart LR
 
 Keeping cache and source of truth in sync is the hard part. Common strategies: **TTL expiry** (simple, allows brief staleness), **event-driven invalidation** (publish a change event — often via a message queue — to evict/refresh), and **versioned keys** (change the key when data changes so stale entries are never read).
 
-**When to use caching.** Read-heavy workloads, expensive computations, and data that tolerates *some* staleness. **Trade-offs:** every cache introduces a **consistency window** (the cache may be stale), and three classic failure modes to design against — **cache stampede** (many misses hit the DB at once), **hot keys** (one key overwhelms one node), and **thundering herd** on expiry.
+**When to use caching.** Read-heavy workloads, expensive computations, and data that tolerates *some* staleness. **Trade-offs:** every cache introduces a **consistency window** (the cache may be stale), and three classic failure modes to design against — **cache stampede / thundering herd** (many simultaneous misses on a popular key all hit the DB at once, often right when it expires) and **hot keys** (one key's traffic overwhelms a single node).
 
 ---
 
 ## 8. CDNs
 
-**Explanation.** A **Content Delivery Network** is a globally distributed network of **edge servers** that cache content close to users. When a user in Tokyo requests an image, the CDN serves it from a nearby Tokyo edge instead of your origin server in Virginia — slashing latency and offloading your origin.
+**Explanation.** A **Content Delivery Network (CDN)** is a globally distributed network of **edge servers** that cache content close to users. When a user in Tokyo requests an image, the CDN serves it from a nearby Tokyo edge instead of your origin server in Virginia — slashing latency and offloading your origin.
 
 ```mermaid
 flowchart LR
@@ -288,7 +292,7 @@ flowchart LR
 
 **When to use.** Static and semi-static content — images, CSS/JS, video, fonts, downloads. Modern CDNs also cache API responses and run logic at the edge.
 
-**Trade-offs.** CDNs add a layer to **invalidate** (purge an edge when content changes — TTLs and explicit purges). They shine for **read-heavy, geographically spread, cacheable** content and do little for highly dynamic, per-user responses. **Push vs pull:** *pull* CDNs fetch from origin on first miss (simple, self-managing); *push* CDNs require you to upload content ahead of time (more control, more work).
+**Trade-offs.** CDNs add a layer to **invalidate** (purge an edge when content changes — via TTLs and explicit purges). They shine for **read-heavy, geographically spread, cacheable** content and do little for highly dynamic, per-user responses. **Push vs pull:** *pull* CDNs fetch from origin on first miss (simple, self-managing); *push* CDNs require you to upload content ahead of time (more control, more work).
 
 ---
 
@@ -298,27 +302,27 @@ flowchart LR
 
 | | **SQL (Relational)** | **NoSQL (Non-relational)** |
 |---|---|---|
-| Examples | PostgreSQL, MySQL | MongoDB (document), Cassandra/DynamoDB (wide-column/key-value), Redis (KV), Neo4j (graph) |
+| Examples | PostgreSQL, MySQL | MongoDB (document), Cassandra (wide-column), DynamoDB (key-value/document), Redis (KV), Neo4j (graph) |
 | Schema | Fixed, predefined | Flexible / schema-on-read |
 | Data shape | Tables, rows, relationships | Documents, key-value, wide-column, graph |
-| Transactions | Strong **ACID** guarantees | Often **BASE** / eventual; varies by engine |
-| Scaling | Traditionally vertical; sharding is harder | Built for horizontal scale-out |
+| Transactions | Strong **ACID** guarantees | Varies by engine; often tunable, historically **BASE** / eventual |
+| Scaling | Vertical first; sharding is possible but harder | Built for horizontal scale-out |
 | Query | Rich joins via SQL | Optimized for specific access patterns; joins limited |
 
-**ACID** (SQL strength): **A**tomicity, **C**onsistency, **I**solation, **D**urability — transactions are all-or-nothing and correct even under concurrency/crashes.
-**BASE** (many NoSQL): **B**asically **A**vailable, **S**oft state, **E**ventual consistency — trade strict guarantees for availability and scale.
+**ACID** (a SQL strength): **A**tomicity, **C**onsistency, **I**solation, **D**urability — transactions are all-or-nothing and remain correct even under concurrency and crashes.
+**BASE** (many NoSQL systems): **B**asically **A**vailable, **S**oft state, **E**ventual consistency — trade strict guarantees for availability and scale.
 
 ### When to use which
-- **Choose SQL** when you have **structured data with relationships**, need **multi-row transactions** and strong consistency (payments, orders, inventory), and your query patterns are varied/ad-hoc. Default here unless you have a concrete reason not to.
+- **Choose SQL** when you have **structured data with relationships**, need **multi-row transactions** and strong consistency (payments, orders, inventory), and your query patterns are varied/ad-hoc. A sound default unless you have a concrete reason not to.
 - **Choose NoSQL** when you need **massive horizontal scale**, **flexible/evolving schemas**, very high write throughput, or your access pattern is a simple, known key lookup (sessions, feeds, time-series, caching). Pick the *sub-type* by access pattern: document for nested objects, key-value for lookups, wide-column for huge write volume, graph for relationship-heavy traversal.
 
-**Trade-off.** "NoSQL = scalable, SQL = not" is a myth — modern SQL (with replication, partitioning, and managed services) scales very far, and modern NoSQL can offer tunable consistency. Choose based on **data shape, access patterns, and consistency needs**, not hype.
+**Trade-off.** "NoSQL = scalable, SQL = not" is a myth — modern SQL (with replication, partitioning, and managed services) scales very far, and modern NoSQL often offers tunable consistency (and some, like DynamoDB and Spanner, support transactions). Choose based on **data shape, access patterns, and consistency needs**, not hype.
 
 ---
 
 ## 10. Replication
 
-**Explanation.** **Replication** keeps copies of the same data on multiple machines for **availability** (survive a node failure), **read scaling** (serve reads from many replicas), and **geographic locality** (read from a nearby copy). The most common pattern is **leader–follower** (a.k.a. primary–replica / master–slave).
+**Explanation.** **Replication** keeps copies of the same data on multiple machines for **availability** (survive a node failure), **read scaling** (serve reads from many replicas), and **geographic locality** (read from a nearby copy). The most common pattern is **leader–follower** (a.k.a. primary–replica).
 
 ```mermaid
 flowchart TB
@@ -336,12 +340,14 @@ flowchart TB
 - If the leader dies, a follower is promoted (**failover**).
 
 ### Sync vs Async replication
-- **Synchronous:** leader waits for follower(s) to confirm before acking the write. **No data loss on failover**, but higher write latency and a stalled write if a follower is slow.
-- **Asynchronous:** leader acks immediately, replicates in the background. **Fast**, but a leader crash can lose the last unreplicated writes, and followers can serve **stale reads** (replication lag).
+- **Synchronous:** the leader waits for follower(s) to confirm before acking the write. **No data loss on failover**, but higher write latency and a stalled write if a follower is slow.
+- **Asynchronous:** the leader acks immediately and replicates in the background. **Fast**, but a leader crash can lose the last unreplicated writes, and followers can serve **stale reads** (replication lag).
+
+> Many production systems use **semi-synchronous** replication — wait for *one* follower to confirm, replicate to the rest async — as a middle ground between durability and latency.
 
 **When to use.** Almost every production database uses replication — it's table stakes for availability and read scaling. **Multi-leader** and **leaderless** (e.g. Dynamo-style quorum) setups exist for multi-region writes but add conflict-resolution complexity.
 
-**Trade-offs.** Replication scales **reads, not writes** (all writes still funnel through the leader — that's what sharding solves). It introduces **replication lag** → eventual consistency on followers. Mitigate stale-read surprises with **read-your-writes** (route a user's reads to the leader right after they write).
+**Trade-offs.** Single-leader replication scales **reads, not writes** (all writes still funnel through the leader — that's what sharding solves). It introduces **replication lag** → eventual consistency on followers. Mitigate stale-read surprises with **read-your-writes** consistency (route a user's reads to the leader right after they write).
 
 ---
 
@@ -351,13 +357,13 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    R[Router / Shard key] --> S1[(Shard A<br/>users 0-33%)]
-    R --> S2[(Shard B<br/>users 34-66%)]
-    R --> S3[(Shard C<br/>users 67-100%)]
+    R["Router / Shard key"] --> S1[("Shard A<br/>users 0-33%")]
+    R --> S2[("Shard B<br/>users 34-66%")]
+    R --> S3[("Shard C<br/>users 67-100%")]
 ```
 
 ### Choosing a partitioning strategy
-- **Range-based:** split by ranges of the key (e.g. user IDs A–M, N–Z). Great for range scans; **risks hot spots** if data is skewed (everyone in one range).
+- **Range-based:** split by ranges of the key (e.g. user IDs A–M, N–Z). Great for range scans; **risks hot spots** if data is skewed (everyone lands in one range).
 - **Hash-based:** `hash(key) % N` decides the shard. Even distribution; **kills range queries** and reshuffles almost everything when `N` changes (→ use **consistent hashing**, §18).
 - **Directory/lookup-based:** a lookup table maps keys → shards. Flexible, but the lookup table is itself a component to scale and protect.
 
@@ -371,17 +377,17 @@ flowchart TB
 
 ## 12. Indexing
 
-**Explanation.** An **index** is an auxiliary data structure (usually a **B-tree**, or a hash/LSM-tree) that lets the database find rows by a column value **without scanning the whole table** — turning an O(n) full-table scan into an O(log n) lookup. It's the database equivalent of a book's index.
+**Explanation.** An **index** is an auxiliary data structure (commonly a **B-tree**, or a hash or LSM-tree) that lets the database find rows by a column value **without scanning the whole table** — turning an O(n) full-table scan into roughly an O(log n) lookup (B-tree) or O(1) (hash index). It's the database equivalent of a book's index.
 
 **When to use.** Index the columns you **filter, join, or sort on** frequently (e.g. `WHERE email = ?`, foreign keys). Use **composite indexes** for multi-column queries and **covering indexes** to answer a query entirely from the index.
 
-**Trade-offs.** Indexes **speed up reads but slow down writes** (every `INSERT`/`UPDATE`/`DELETE` must also update the index) and consume extra storage. Over-indexing is a real anti-pattern — each index is paid for on every write. Index deliberately, based on actual query patterns.
+**Trade-offs.** Indexes **speed up reads but slow down writes** (every `INSERT`/`UPDATE`/`DELETE` must also update affected indexes) and consume extra storage. Over-indexing is a real anti-pattern — each index is paid for on every write. Index deliberately, based on actual query patterns.
 
 ---
 
 ## 13. CAP Theorem & Consistency Models
 
-**Explanation.** The **CAP theorem** says a **distributed** system can guarantee at most **two of three** properties when a network partition occurs:
+**Explanation.** The **CAP theorem** is about a **distributed** system facing a **network partition**. Of these three properties, it can fully guarantee at most **two** at the same time:
 
 - **C — Consistency:** every read sees the most recent write (here, *linearizability* — the strongest form).
 - **A — Availability:** every request gets a (non-error) response.
@@ -389,21 +395,23 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    P[Network Partition happens<br/>nodes can't talk] --> Q{Choose}
+    P[Network partition happens<br/>nodes can't talk] --> Q{Choose}
     Q -->|Stay consistent| CP[CP: reject/wait<br/>some requests fail]
     Q -->|Stay available| AP[AP: answer anyway<br/>may return stale data]
 ```
 
-**The catch:** in any real network, **partitions will happen**, so **P is non-negotiable**. The real choice during a partition is **C vs A**:
-- **CP systems** (e.g. traditional RDBMS configs, ZooKeeper, HBase) refuse or block requests to avoid returning wrong data.
+**The catch:** in any real network, **partitions will happen**, so a distributed system must tolerate them — **P is effectively non-negotiable**. The real choice *during a partition* is **C vs A**:
+- **CP systems** (e.g. ZooKeeper, HBase, a single-leader RDBMS that refuses writes when it can't reach its quorum) reject or block requests to avoid returning wrong data.
 - **AP systems** (e.g. Cassandra, DynamoDB, classic Dynamo) keep answering, accepting temporary staleness.
+
+> CAP is a coarse model: "C" means linearizability and "A" means *every* node stays available, so the labels describe behaviour only at the extremes. Real databases offer tunable knobs (quorums, isolation levels) that live between these corners.
 
 ### PACELC — the more complete picture
 CAP only describes behaviour *during* a partition. **PACELC** extends it: **if Partition (P), choose A or C; Else (E)** — even in normal operation — choose **Latency (L) or Consistency (C)**. This captures the everyday truth that strong consistency costs latency even when nothing is broken.
 
 ### Consistency models (a spectrum, not a binary)
 - **Strong consistency (linearizability):** every client sees the latest write immediately. Easiest to reason about; costs latency and availability. Use for money, inventory, unique-username checks.
-- **Causal consistency:** operations that are causally related are seen in order by everyone; unrelated ones may differ. Good middle ground (e.g. comment threads).
+- **Causal consistency:** operations that are causally related are seen in the same order by everyone; unrelated ones may differ. A good middle ground (e.g. comment threads).
 - **Eventual consistency:** replicas **converge** over time; reads may be briefly stale. Cheapest and most available. Use for likes, view counts, feeds, DNS.
 
 **When to use which.** Match the model to the **business cost of staleness**: a stale like count is fine (eventual); a double-spent balance is not (strong). Most real systems **mix** models — strong on the critical path, eventual on the rest.
@@ -427,16 +435,16 @@ flowchart LR
 ### RabbitMQ vs Kafka — two different tools
 | | **RabbitMQ** (message broker / queue) | **Kafka** (distributed event log / stream) |
 |---|---|---|
-| Core model | A **queue** that empties as messages are consumed | A **durable log** you can re-read |
+| Core model | A **queue** that empties as messages are consumed | A **durable, append-only log** you can re-read |
 | Delivery | Broker **pushes** to consumers; rich routing | Consumers **pull** and track their own **offset** |
 | Replay | No (gone once acked) | Yes — replay within the retention window |
-| Throughput | High, but tuned for routing/guarantees | Extremely high (millions/s via sequential disk I/O) |
+| Throughput | High, tuned for routing/guarantees | Extremely high (sequential disk I/O, partitioned) |
 | Multiple consumers | Competing consumers per queue | Many independent consumer groups read the same stream |
 | Best for | Task distribution, flexible routing, per-message acks | High-volume event streams, replay, fan-out, analytics |
 
 > **Heuristic:** need **replay** or **many independent consumers** of the same data? → **Kafka.** Need **flexible task routing with acknowledgments** for discrete jobs? → **RabbitMQ.** A common architecture uses **both**: Kafka for high-volume event streams, RabbitMQ for internal task dispatch.
 
-**Trade-offs.** Async buys decoupling and resilience but adds complexity: you must handle **at-least-once delivery** (so make consumers **idempotent**), **ordering** guarantees (or lack thereof), **dead-letter queues** for poison messages, and the broker becoming critical infrastructure to run and scale.
+**Trade-offs.** Async buys decoupling and resilience but adds complexity: most brokers default to **at-least-once delivery** (so make consumers **idempotent**), **ordering** is only guaranteed within limits (e.g. per Kafka partition), you need **dead-letter queues** for poison messages, and the broker itself becomes critical infrastructure to run and scale.
 
 ---
 
@@ -468,9 +476,9 @@ flowchart TB
 | Failure blast radius | One bug can take down everything | Isolated (if designed well) |
 | New costs | — | Network latency, distributed transactions, service discovery, observability |
 
-**When to use which.** **Start with a (well-structured) monolith** — it is faster to build, easier to debug, and most products never outgrow it. Move to microservices when you have **multiple teams stepping on each other**, **components with very different scaling needs**, or independent release cadences. Splitting too early is one of the most common and expensive mistakes; a "modular monolith" captures much of the benefit with little of the cost.
+**When to use which.** **Start with a (well-structured) monolith** — it is faster to build, easier to debug, and most products never outgrow it. Move to microservices when you have **multiple teams stepping on each other**, **components with very different scaling needs**, or independent release cadences. Splitting too early is one of the most common and expensive mistakes; a **modular monolith** captures much of the benefit with little of the cost.
 
-**Trade-offs.** Microservices trade *in-process simplicity* for *operational and distributed-systems complexity*: every call is now a network call that can fail, transactions span services (sagas), and you **must** invest in observability (§20) just to understand what's happening.
+**Trade-offs.** Microservices trade *in-process simplicity* for *operational and distributed-systems complexity*: every call is now a network call that can fail, transactions span services (handled with patterns like **sagas**), and you **must** invest in observability (§20) just to understand what's happening.
 
 ---
 
@@ -482,23 +490,23 @@ flowchart TB
 |---|---|---|---|
 | Style | Resources over HTTP (`GET /users/1`) | RPC: call remote methods like local functions | Query language; client asks for exact fields |
 | Payload | JSON (human-readable) | Protocol Buffers (binary, compact) | JSON over a typed schema |
-| Transport | HTTP/1.1 or 2 | HTTP/2 (supports streaming) | Usually HTTP POST |
+| Transport | HTTP/1.1 or HTTP/2 | HTTP/2 (supports streaming) | Usually HTTP POST |
 | Contract | Loose (OpenAPI optional) | Strict `.proto` contract, codegen, multi-language | Strong typed schema |
 | Caching | **Easy** — native HTTP caching on GET | Harder | Harder (POST, varied queries) |
-| Speed | Good | **Fastest** (binary, can be 5–10× over JSON) | Good; wins by fetching only needed data |
+| Speed | Good | **Often fastest** (compact binary, HTTP/2 multiplexing) | Good; wins by fetching only needed data |
 
 ### When to use which
 - **REST** — public/external APIs, simple CRUD, broad client compatibility, and when **HTTP caching** matters. The safe default for web-facing APIs.
-- **gRPC** — **internal service-to-service** calls where you control both ends and want low latency, strong contracts, streaming, and multi-language typed clients. The default for east-west microservice traffic.
+- **gRPC** — **internal service-to-service** calls where you control both ends and want low latency, strong contracts, streaming, and multi-language typed clients. A strong default for east-west microservice traffic.
 - **GraphQL** — **client-driven** data needs where over-/under-fetching hurts: rich mobile/web UIs that pull from many sources, where one flexible query beats many round trips.
 
-**Trade-offs.** REST can cause **over-fetching** (too much data) or **under-fetching** (many round trips). gRPC's binary format isn't browser-friendly without a proxy and is harder to debug by hand. GraphQL pushes complexity to the server (resolver performance, the **N+1 query** problem) and complicates **caching** and **rate limiting** because every query is different. These styles **coexist** — many systems run REST at the edge, gRPC between services, and a GraphQL gateway for flexible clients.
+**Trade-offs.** REST can cause **over-fetching** (too much data) or **under-fetching** (many round trips). gRPC's binary format isn't browser-friendly without a proxy (e.g. gRPC-Web) and is harder to debug by hand. GraphQL pushes complexity to the server (resolver performance, the **N+1 query** problem) and complicates **caching** and **rate limiting** because every query can be different. These styles **coexist** — many systems run REST at the edge, gRPC between services, and a GraphQL gateway for flexible clients.
 
 ---
 
 ## 17. Rate Limiting
 
-**Explanation.** **Rate limiting** caps how many requests a client may make in a time window. It protects systems from abuse, accidental floods, and the **thundering herd**, and enforces fair usage and API tiers.
+**Explanation.** **Rate limiting** caps how many requests a client may make in a time window. It protects systems from abuse, accidental floods, and overload, and it enforces fair usage and API tiers.
 
 ```mermaid
 flowchart LR
@@ -509,15 +517,15 @@ flowchart LR
 
 | Algorithm | How it works | Trade-off |
 |---|---|---|
-| **Token Bucket** | Bucket refills tokens at a steady rate; each request spends one; empty → reject | **Allows bursts** up to bucket size while capping the long-run average. The strong default for public APIs |
+| **Token Bucket** | Bucket refills tokens at a steady rate; each request spends one; empty → reject | **Allows bursts** up to bucket size while capping the long-run average. A strong default for public APIs |
 | **Leaky Bucket** | Requests queue and drain at a fixed rate | **Smooth, constant output** regardless of input shape (good for SMS/payment downstreams); no bursts |
-| **Fixed Window** | Count requests per fixed clock window (e.g. per minute) | Simplest, but the **boundary exploit** allows up to **2× the rate** straddling two windows |
-| **Sliding Window Log** | Store timestamp of every request, count those in the trailing window | **Exact**, but O(n) memory per client |
-| **Sliding Window Counter** | Weighted blend of current + previous fixed windows | O(1) memory, ~small drift; **best accuracy/cost balance** for most APIs |
+| **Fixed Window** | Count requests per fixed clock window (e.g. per minute) | Simplest, but the **boundary burst** can allow up to ~**2× the rate** across two adjacent windows |
+| **Sliding Window Log** | Store the timestamp of every request, count those in the trailing window | **Exact**, but O(n) memory per client |
+| **Sliding Window Counter** | Weighted blend of current + previous fixed windows | O(1) memory, small approximation error; **best accuracy/cost balance** for most APIs |
 
-**When to use which.** **Token bucket** for most public APIs (predictable average + controlled bursts). **Leaky bucket** when downstream needs a *smooth* rate. **Sliding window counter** when you want fixed-window simplicity without the boundary exploit. Avoid plain **fixed window** unless paired with a finer-grained check.
+**When to use which.** **Token bucket** for most public APIs (predictable average + controlled bursts). **Leaky bucket** when a downstream needs a *smooth* rate. **Sliding window counter** when you want fixed-window simplicity without the boundary burst. Avoid plain **fixed window** unless paired with a finer-grained check.
 
-**Trade-offs.** In a distributed fleet, limits must be **shared across nodes** — typically via a centralized store like **Redis** — which adds a network hop and a dependency. Always return a clear **`429 Too Many Requests`** with `Retry-After` so well-behaved clients back off.
+**Trade-offs.** In a distributed fleet, limits must be **shared across nodes** — typically via a centralized store like **Redis** — which adds a network hop and a dependency. Always return a clear **`429 Too Many Requests`** with a `Retry-After` header so well-behaved clients back off.
 
 ---
 
@@ -527,20 +535,20 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph Ring["Hash Ring (clockwise ownership)"]
-        N1[Node A @ pos 10]
-        N2[Node B @ pos 40]
-        N3[Node C @ pos 75]
-        K1[key1 -> 25 => Node B]
-        K2[key2 -> 60 => Node C]
-        K3[key3 -> 90 => Node A wraps]
+    subgraph Ring["Hash ring — a key is owned by the next node clockwise"]
+        NA["Node A (pos 10)"]
+        NB["Node B (pos 40)"]
+        NC["Node C (pos 75)"]
     end
+    K1["key1 hashes to 25"] --> NB
+    K2["key2 hashes to 60"] --> NC
+    K3["key3 hashes to 90, wraps around"] --> NA
 ```
 
 ### Virtual nodes (the practical refinement)
-With one position per node, the ring splits into uneven arcs, so some nodes own far more keyspace than others (**load skew**), and a single node failing dumps all its load onto **one** neighbor. The fix: give each physical node **many positions** on the ring (**virtual nodes / vnodes**, often ~100–200 each). This evens out distribution and, on failure, **spreads the dead node's load across many** survivors rather than one.
+With one position per node, the ring splits into uneven arcs, so some nodes own far more keyspace than others (**load skew**), and a single node failing dumps all its load onto **one** neighbor. The fix: give each physical node **many positions** on the ring (**virtual nodes / vnodes**, often on the order of ~100–200 each, though the exact count is implementation-specific). This evens out distribution and, on failure, **spreads the dead node's load across many** survivors rather than one.
 
-**When to use.** Distributed **caches** (Memcached client sharding), **databases** (Cassandra, DynamoDB, ScyllaDB — descended from Amazon's Dynamo paper), and any **L7 load balancer** doing sticky hashing where the node set changes over time.
+**When to use.** Distributed **caches** (Memcached client sharding), **databases** (Cassandra, ScyllaDB, and Amazon DynamoDB — all descended from the Dynamo lineage), and any **L7 load balancer** doing sticky hashing where the node set changes over time.
 
 **Trade-offs.** More complex than `mod N`, and vnodes add bookkeeping/memory — but the alternative (re-sharding the world on every topology change) is far worse at scale. This is *the* canonical technique for scaling stateful, partitioned systems gracefully.
 
@@ -550,10 +558,10 @@ With one position per node, the ring splits into uneven arcs, so some nodes own 
 
 **Explanation.** **Availability** is the fraction of time a system is operational, usually stated in **"nines"**:
 
-| Availability | Downtime per year |
+| Availability | Downtime per year (approx.) |
 |---|---|
 | 99% ("two nines") | ~3.65 days |
-| 99.9% ("three nines") | ~8.77 hours |
+| 99.9% ("three nines") | ~8.76 hours |
 | 99.99% ("four nines") | ~52.6 minutes |
 | 99.999% ("five nines") | ~5.26 minutes |
 
@@ -562,7 +570,7 @@ You raise availability by removing **single points of failure (SPOFs)** — any 
 - **Redundancy:** run **N+1** (or more) copies of every critical component so a spare can take over.
 - **Failover:** automatically shift traffic from a failed component to a healthy one.
   - **Active-passive:** a standby waits idle and is promoted on failure (simpler; some failover delay, and you pay for idle capacity).
-  - **Active-active:** all copies serve traffic simultaneously (no idle waste, instant tolerance; needs load balancing and state coordination).
+  - **Active-active:** all copies serve traffic simultaneously (no idle waste, near-instant tolerance; needs load balancing and state coordination).
 
 ```mermaid
 flowchart TB
@@ -574,9 +582,9 @@ flowchart TB
     DBp -. replicate .-> DBr[(DB Replica)]
 ```
 
-**Finding SPOFs:** trace every request and ask *"what dies if this one box vanishes?"* — the load balancer, the single DB leader, a single AZ/region, even DNS. Then add redundancy at each: multiple LBs, replicated DBs, multi-AZ/multi-region deployment, health checks driving automatic failover.
+**Finding SPOFs:** trace every request and ask *"what dies if this one box vanishes?"* — the load balancer, the single DB leader, a single AZ/region, even DNS. Then add redundancy at each: multiple LBs, replicated DBs, multi-AZ/multi-region deployment, and health checks driving automatic failover.
 
-**Trade-offs.** Every nine is **exponentially more expensive** — redundancy doubles or triples cost and adds coordination complexity (split-brain, failover storms, replication lag). Buy only the availability the business actually needs; five nines for a hobby app is waste, while four-plus nines is mandatory for payments.
+**Trade-offs.** Each additional nine is **disproportionately more expensive** — redundancy multiplies cost and adds coordination complexity (split-brain, failover storms, replication lag). Buy only the availability the business actually needs; five nines for a hobby app is waste, while four-plus nines is mandatory for payments.
 
 ---
 
@@ -598,9 +606,9 @@ flowchart LR
 - **Metrics** — aggregated numeric time-series (QPS, p99 latency, error rate, CPU). Cheap to store, ideal for **dashboards and alerting** on trends (e.g. Prometheus + Grafana). Watch the **golden signals**: latency, traffic, errors, saturation.
 - **Traces** — follow a single request as it hops across services, showing where time is spent. Essential for finding the **slow service in a microservices chain** (e.g. OpenTelemetry + Jaeger).
 
-**When to use.** Always — build it in from day one, not after the first outage. Logs for the "what exactly happened to this request," metrics for "is the system healthy and trending well," traces for "which service in the chain is slow."
+**When to use.** Always — build it in from day one, not after the first outage. Logs for "what exactly happened to this request," metrics for "is the system healthy and trending well," traces for "which service in the chain is slow."
 
-**Trade-offs.** Observability has real cost: high-cardinality metrics and verbose logs get **expensive** and noisy fast, so **sample** traces, set **log levels**, and **alert on symptoms users feel** (latency, errors) rather than every internal blip — alert fatigue is as dangerous as no alerts.
+**Trade-offs.** Observability has real cost: high-cardinality metrics and verbose logs get **expensive** and noisy fast, so **sample** traces, set sensible **log levels**, and **alert on symptoms users feel** (latency, errors) rather than every internal blip — alert fatigue is as dangerous as no alerts.
 
 ---
 
@@ -620,7 +628,7 @@ Then **apply it**: pick a problem (URL shortener → rate limiter → news feed 
 
 ---
 
-## 22. Sources
+## 22. References / Sources
 
 **The framework & estimation**
 - [Master System Design Interviews: A 6-Step Framework](https://engineeringatscale.substack.com/p/system-design-interview-success-six-step-framework)
@@ -639,8 +647,8 @@ Then **apply it**: pick a problem (URL shortener → rate limiter → news feed 
 - [Choosing the Right Cache Strategy — DEV](https://dev.to/nk_sk_6f24fdd730188b284bf/choosing-the-right-cache-strategy-writing-eviction-and-invalidation-based-on-your-requirements-45md)
 
 **Databases, replication & sharding**
-- [Kafka vs RabbitMQ — AWS](https://aws.amazon.com/compare/the-difference-between-rabbitmq-and-kafka/)
 - [Designing Data-Intensive Applications — Martin Kleppmann (book)](https://dataintensive.net/)
+- [Kafka vs RabbitMQ — AWS](https://aws.amazon.com/compare/the-difference-between-rabbitmq-and-kafka/)
 
 **CAP & consistency**
 - [CAP Theorem Explained — AlgoMaster](https://blog.algomaster.io/p/cap-theorem-explained)
