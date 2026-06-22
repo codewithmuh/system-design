@@ -32,8 +32,8 @@ The goal: **a complete beginner** should be able to follow along, understand *wh
 
 | # | System | What you'll learn | Status |
 |---|--------|-------------------|:------:|
-| 1 | [Cloud Storage (Dropbox / Google Drive)](./case-studies/cloud-storage/README.md) | Chunking, dedup, sync engine, conflict resolution | 🚧 |
-| 2 | [ChatGPT / OpenAI](./case-studies/chatgpt-openai/README.md) | LLM inference serving, batching, KV cache, token streaming | 🚧 |
+| 1 | [Cloud Platform (AWS / Google Cloud)](./case-studies/cloud-platform/README.md) | Control plane vs data plane, virtualization, multi-tenancy, IAM | 🚧 |
+| 2 | [ChatGPT & Claude (AI Assistant)](./case-studies/chatgpt-claude/README.md) | LLM inference serving, batching, KV cache, token streaming | 🚧 |
 | 3 | [Instagram](./case-studies/instagram/README.md) | News feed, media storage, fan-out | ⬜ |
 | 4 | [WhatsApp](./case-studies/whatsapp/README.md) | Real-time messaging, presence, delivery receipts | ⬜ |
 | 5 | [Facebook](./case-studies/facebook/README.md) | Social graph, feed ranking, notifications | ⬜ |
