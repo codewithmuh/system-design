@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Node (if any tooling is added later)
+node_modules/
+dist/
+*.log
+.env
+.env.*
+
+# Excalidraw / export scratch
+*.excalidraw.bak
+~$*
+
+# Video/large binaries (keep these out of git — link or use Git LFS)
+*.mp4
+*.mov
+*.psd
+*.aep
