@@ -5,7 +5,40 @@
 **Learn how the biggest systems in the world are actually built.**
 Clear explanations, real diagrams, and full case studies — for the [@codewithmuh](https://youtube.com/@codewithmuh) YouTube series.
 
+<p align="center">
+  <a href="https://github.com/codewithmuh/system-design/releases"><img src="https://img.shields.io/github/v/release/codewithmuh/system-design?color=blue&label=version&style=flat-square" alt="GitHub Release"></a>
+  <a href="https://github.com/codewithmuh/system-design/stargazers"><img src="https://img.shields.io/github/stars/codewithmuh/system-design?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/codewithmuh/system-design/network/members"><img src="https://img.shields.io/github/forks/codewithmuh/system-design?style=flat-square" alt="Forks"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License: MIT"></a>
+  <a href="https://youtube.com/@codewithmuh"><img src="https://img.shields.io/badge/YouTube-%40codewithmuh-FF0000?style=flat-square&logo=youtube&logoColor=white" alt="YouTube"></a>
+  <br>
+  <img src="https://img.shields.io/badge/Focus-High%20Scalability-blue?style=flat-square" alt="Scalability">
+  <img src="https://img.shields.io/badge/Diagrams-Mermaid%20%2B%20Excalidraw-orange?style=flat-square" alt="Diagrams">
+  <img src="https://img.shields.io/badge/Level-Beginner%20%E2%86%92%20Staff%20Engineer-purple?style=flat-square" alt="Level">
+</p>
+
 </div>
+
+```mermaid
+flowchart TD
+    Client["Clients (Mobile / Web / Desktop)"] --> DNS["DNS & Anycast Geo-Routing"]
+    DNS --> CDN["Edge CDN (Static Assets & Video Chunks)"]
+    DNS --> LB["API Gateway & Load Balancer (Rate Limit + TLS)"]
+    
+    subgraph Services["Core Microservices Cluster"]
+        LB --> Auth["Auth Service"]
+        LB --> Core["Core Application API"]
+        LB --> Search["Search & Recommendation Engine"]
+    end
+    
+    subgraph DataTier["Data & Cache Tier"]
+        Core --> Cache[("Distributed Cache (Redis / Memcached)")]
+        Core --> SQL[("Primary SQL DB (Postgres / MySQL)")]
+        SQL -.-> Replica[("Read Replicas")]
+        Core --> Queue[("Message Broker (Kafka / RabbitMQ)")]
+        Queue --> Workers["Async Background Workers"]
+    end
+```
 
 ---
 
